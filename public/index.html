@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Dashboard Raccolta Rifiuti Catania</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Andrea Giuseppe Cavallaro">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #map {
+            height: 80vh;
+            width: 100%;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem;
+        }
+
+        .stats {
+            padding: 1rem;
+            background: #ecf0f1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>Sistema Smart Raccolta Rifiuti - Catania Centro</h1>
+    </div>
+
+    <div class="stats">
+        <span id="vehicle-count">Caricamento...</span>
+        <button onclick="refreshData()">Aggiorna Dati</button>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Inizializza mappa centrata su Catania
+        const map = L.map('map').setView([37.5079, 15.0830], 13);
+
+        // Tile layer OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let vehicleMarkers = {};
+
+        // Carica dati dal backend
+        async function loadMapData() {
+            try {
+                const response = await fetch('/api/map-data');
+                const data = await response.json();
+
+                // Pulisci marker esistenti
+                Object.values(vehicleMarkers).forEach(marker => map.removeLayer(marker));
+                vehicleMarkers = {};
+
+                // Aggiungi marker per ogni veicolo
+                data.forEach(vehicle => {
+                    const marker = L.marker([vehicle.lat, vehicle.lng])
+                        .bindPopup(`
+                            <b>${vehicle.vehicleId}</b><br>
+                            Velocità: ${vehicle.speed || 0} km/h<br>
+                            Ultimo aggiornamento: ${new Date(vehicle.timestamp).toLocaleString()}
+                        `);
+
+                    marker.addTo(map);
+                    vehicleMarkers[vehicle.vehicleId] = marker;
+                });
+
+                // Aggiorna statistiche
+                document.getElementById('vehicle-count').textContent =
+                    `Veicoli attivi: ${Object.keys(vehicleMarkers).length}`;
+
+            } catch (error) {
+                console.error('Errore caricamento dati:', error);
+            }
+        }
+
+        function refreshData() {
+            loadMapData();
+        }
+
+        // Carica dati all'avvio
+        loadMapData();
+
+        // Auto-refresh ogni 30 secondi
+        setInterval(loadMapData, 30000);
+    </script>
+</body>
+
+</html>
