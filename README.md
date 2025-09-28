@@ -4,6 +4,7 @@ https://waste-management-vqgq.onrender.com
 
 add truck endpoint:
 POST: https://waste-management-vqgq.onrender.com/api/gps-data
+
 sample JSON:
 {
   "vehicleId": "truck002",
@@ -11,7 +12,9 @@ sample JSON:
   "speed": 20.0,
   "routeSegment": "piazza_duomo"
 }
+
 or
+
 {
   "vehicleId": "truck001",
   "coordinates": [15.0840, 37.5085],
