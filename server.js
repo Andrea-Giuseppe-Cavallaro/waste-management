@@ -1,6 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
 
@@ -30,12 +32,15 @@ VehiclePositionSchema.index({ location: '2dsphere' });
 
 const VehiclePosition = mongoose.model('VehiclePosition', VehiclePositionSchema);
 
-// API Routes
+// Creazione server HTTP e Socket.IO
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: "*" } // in produzione puoi limitare l'origine
+});
 
-// Avvia server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server attivo su porta ${PORT}`);
+// Gestione connessioni Socket.IO
+io.on("connection", (socket) => {
+    console.log("Client connesso:", socket.id);
 });
 
 // POST: Ricevi dati GPS dal camion
@@ -51,6 +56,17 @@ app.post('/api/gps-data', async (req, res) => {
         });
 
         await position.save();
+
+        // Invio aggiornamento in tempo reale a tutti i client
+        io.emit("vehicle-update", {
+            vehicleId,
+            lat: coordinates[1],
+            lng: coordinates[0],
+            speed,
+            routeSegment,
+            timestamp: position.timestamp
+        });
+
         res.json({
             message: 'Dati GPS salvati con successo',
             id: position._id
@@ -82,18 +98,14 @@ app.get('/api/vehicles/:vehicleId', async (req, res) => {
     }
 });
 
-
 // Serve file statici per la dashboard
 app.use(express.static('public'));
 
 // GET: Dati per mappa (solo ultima posizione per veicolo)
 app.get('/api/map-data', async (req, res) => {
     try {
-        // Aggregation per ottenere solo l'ultima posizione di ogni veicolo
         const latestPositions = await VehiclePosition.aggregate([
-            // Ordina per timestamp decrescente
             { $sort: { timestamp: -1 } },
-            // Raggruppa per vehicleId e prendi il primo (più recente)
             {
                 $group: {
                     _id: "$vehicleId",
@@ -106,7 +118,6 @@ app.get('/api/map-data', async (req, res) => {
             }
         ]);
 
-        // Formato per frontend
         const mapData = latestPositions.map(pos => ({
             vehicleId: pos.vehicleId,
             lat: pos.location.coordinates[1],
@@ -120,4 +131,10 @@ app.get('/api/map-data', async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Avvio server con Socket.IO
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server attivo su porta ${PORT}`);
 });

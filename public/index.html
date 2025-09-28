@@ -41,13 +41,15 @@
 
     <div class="stats">
         <span id="vehicle-count">Caricamento...</span>
-        <button onclick="refreshData()">Aggiorna Dati</button>
     </div>
 
     <div id="map"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Socket.IO client -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
         // Inizializza mappa centrata su Catania
@@ -58,19 +60,15 @@
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
+        // Oggetto per tenere traccia dei marker
         let vehicleMarkers = {};
 
-        // Carica dati dal backend
-        async function loadMapData() {
+        // --- FUNZIONE PER CARICARE VEICOLI ALL'AVVIO ---
+        async function loadInitialData() {
             try {
                 const response = await fetch('/api/map-data');
                 const data = await response.json();
 
-                // Pulisci marker esistenti
-                Object.values(vehicleMarkers).forEach(marker => map.removeLayer(marker));
-                vehicleMarkers = {};
-
-                // Aggiungi marker per ogni veicolo
                 data.forEach(vehicle => {
                     const marker = L.marker([vehicle.lat, vehicle.lng])
                         .bindPopup(`
@@ -78,12 +76,10 @@
                             Velocità: ${vehicle.speed || 0} km/h<br>
                             Ultimo aggiornamento: ${new Date(vehicle.timestamp).toLocaleString()}
                         `);
-
                     marker.addTo(map);
                     vehicleMarkers[vehicle.vehicleId] = marker;
                 });
 
-                // Aggiorna statistiche
                 document.getElementById('vehicle-count').textContent =
                     `Veicoli attivi: ${Object.keys(vehicleMarkers).length}`;
 
@@ -92,16 +88,41 @@
             }
         }
 
-        function refreshData() {
-            loadMapData();
-        }
+        // Carica dati iniziali
+        loadInitialData();
 
-        // Carica dati all'avvio
-        loadMapData();
+        // --- SOCKET.IO PER AGGIORNAMENTI IN TEMPO REALE ---
+        const socket = io("https://waste-management-vqgq.onrender.com");
 
-        // Auto-refresh ogni 30 secondi
-        setInterval(loadMapData, 30000);
+        socket.on("vehicle-update", (data) => {
+            const { vehicleId, lat, lng, speed, timestamp } = data;
+
+            if (vehicleMarkers[vehicleId]) {
+                // Aggiorna posizione e popup
+                vehicleMarkers[vehicleId].setLatLng([lat, lng]);
+                vehicleMarkers[vehicleId].getPopup().setContent(`
+                    <b>${vehicleId}</b><br>
+                    Velocità: ${speed || 0} km/h<br>
+                    Ultimo aggiornamento: ${new Date(timestamp).toLocaleString()}
+                `);
+            } else {
+                // Crea nuovo marker se veicolo nuovo
+                const marker = L.marker([lat, lng])
+                    .bindPopup(`
+                        <b>${vehicleId}</b><br>
+                        Velocità: ${speed || 0} km/h<br>
+                        Ultimo aggiornamento: ${new Date(timestamp).toLocaleString()}
+                    `);
+                marker.addTo(map);
+                vehicleMarkers[vehicleId] = marker;
+            }
+
+            // Aggiorna contatore veicoli
+            document.getElementById('vehicle-count').textContent =
+                `Veicoli attivi: ${Object.keys(vehicleMarkers).length}`;
+        });
     </script>
+
 </body>
 
 </html>
